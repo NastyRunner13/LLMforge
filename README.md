@@ -572,8 +572,7 @@ pnpm db:studio       # Open Prisma Studio GUI
 
 ## 📄 License
 
-This project is private and not yet licensed for distribution.
-
+MIT
 ---
 
 <p align="center">
