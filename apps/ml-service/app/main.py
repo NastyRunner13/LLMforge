@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health, datasets, training, models, inference
+from app.api import datasets, health, inference, models, training
 from app.core.config import settings
 
 
@@ -18,6 +18,7 @@ async def lifespan(app: FastAPI):
     # Ensure S3 buckets exist (for local dev with MinIO)
     try:
         from app.core.storage import ensure_buckets_exist
+
         ensure_buckets_exist()
     except Exception as e:
         print(f"  S3 bucket setup skipped: {e}")
@@ -25,6 +26,7 @@ async def lifespan(app: FastAPI):
     # Verify database connectivity
     try:
         from app.core.database import engine
+
         with engine.connect() as conn:
             conn.execute(__import__("sqlalchemy").text("SELECT 1"))
         print("  Database connection OK")

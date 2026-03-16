@@ -10,7 +10,7 @@ import json
 import logging
 import time
 
-from transformers import TrainerCallback, TrainerControl, TrainerState, TrainingArguments
+from transformers import TrainerCallback, TrainerControl, TrainerState
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,9 @@ class MetricsCallback(TrainerCallback):
         if self._redis is None:
             try:
                 import redis as _redis
+
                 from app.core.config import settings
+
                 self._redis = _redis.from_url(settings.REDIS_URL)
             except Exception as e:
                 logger.warning("Could not connect to Redis: %s", e)
@@ -60,6 +62,7 @@ class MetricsCallback(TrainerCallback):
         try:
             from app.core.database import SessionLocal
             from app.services import crud
+
             db = SessionLocal()
             try:
                 crud.create_run_metric(
@@ -70,7 +73,9 @@ class MetricsCallback(TrainerCallback):
                     learning_rate=logs.get("learning_rate"),
                 )
                 crud.update_run_status(
-                    db, self.run_id, status=None,
+                    db,
+                    self.run_id,
+                    status=None,
                     current_step=state.global_step,
                     total_steps=state.max_steps if state.max_steps > 0 else None,
                 )
@@ -79,7 +84,9 @@ class MetricsCallback(TrainerCallback):
         except Exception as e:
             logger.warning("Failed to save metrics to DB: %s", e)
 
-    def on_evaluate(self, args, state: TrainerState, control: TrainerControl, metrics=None, **kwargs):
+    def on_evaluate(
+        self, args, state: TrainerState, control: TrainerControl, metrics=None, **kwargs
+    ):
         """Called after evaluation."""
         if not metrics:
             return
@@ -116,8 +123,8 @@ class CheckpointUploadCallback(TrainerCallback):
         s3_prefix = f"checkpoints/{self.run_id}/step-{state.global_step}"
 
         try:
-            from app.core.storage import get_s3_client
             from app.core.config import settings
+            from app.core.storage import get_s3_client
 
             client = get_s3_client()
             ckpt_path = Path(checkpoint_dir)
@@ -133,6 +140,7 @@ class CheckpointUploadCallback(TrainerCallback):
             # Register in DB
             from app.core.database import SessionLocal
             from app.services import crud
+
             db = SessionLocal()
             try:
                 crud.create_checkpoint(

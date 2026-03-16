@@ -1,8 +1,8 @@
 """Data processing Celery tasks — cleaning pipeline workers."""
 
+import contextlib
 import json
 import logging
-import tempfile
 
 from app.core.celery_app import celery_app
 
@@ -21,8 +21,8 @@ def run_cleaning_pipeline(self, dataset_id: str, pipeline_config: list[dict]):
     - pii_redact: Mask PII using regex patterns
     - regex_filter: Apply regex pattern to include/exclude rows
     """
-    from app.core.database import SessionLocal
     from app.core.config import settings
+    from app.core.database import SessionLocal
     from app.core.storage import get_s3_client
     from app.models.db_models import DatasetStatus
     from app.services import crud
@@ -37,9 +37,7 @@ def run_cleaning_pipeline(self, dataset_id: str, pipeline_config: list[dict]):
 
         # Download dataset from S3
         client = get_s3_client()
-        response = client.get_object(
-            Bucket=settings.S3_BUCKET_DATASETS, Key=dataset.file_path_s3
-        )
+        response = client.get_object(Bucket=settings.S3_BUCKET_DATASETS, Key=dataset.file_path_s3)
         raw_data = response["Body"].read().decode("utf-8")
 
         # Parse JSONL
@@ -53,11 +51,18 @@ def run_cleaning_pipeline(self, dataset_id: str, pipeline_config: list[dict]):
                     continue
 
         original_count = len(records)
-        logger.info("[%s] Cleaning pipeline: %d records, %d nodes", dataset_id, original_count, len(pipeline_config))
+        logger.info(
+            "[%s] Cleaning pipeline: %d records, %d nodes",
+            dataset_id,
+            original_count,
+            len(pipeline_config),
+        )
 
         # Run cleaning pipeline
         cleaned = run_pipeline(records, pipeline_config)
-        logger.info("[%s] Cleaning done: %d -> %d records", dataset_id, original_count, len(cleaned))
+        logger.info(
+            "[%s] Cleaning done: %d -> %d records", dataset_id, original_count, len(cleaned)
+        )
 
         # Save cleaned data back to S3
         cleaned_key = dataset.file_path_s3.rsplit(".", 1)[0] + "_cleaned.jsonl"
@@ -71,7 +76,8 @@ def run_cleaning_pipeline(self, dataset_id: str, pipeline_config: list[dict]):
 
         # Update database
         crud.update_dataset(
-            db, dataset_id,
+            db,
+            dataset_id,
             file_path_s3=cleaned_key,
             row_count=len(cleaned),
             status=DatasetStatus.READY,
@@ -81,11 +87,9 @@ def run_cleaning_pipeline(self, dataset_id: str, pipeline_config: list[dict]):
 
     except Exception as exc:
         logger.error("[%s] Cleaning pipeline failed: %s", dataset_id, exc)
-        try:
+        with contextlib.suppress(Exception):
             crud.update_dataset_status(db, dataset_id, DatasetStatus.FAILED, error_message=str(exc))
-        except Exception:
-            pass
-        raise self.retry(exc=exc, countdown=60 * (2 ** self.request.retries))
+        raise self.retry(exc=exc, countdown=60 * (2**self.request.retries)) from exc
     finally:
         db.close()
 
@@ -96,8 +100,8 @@ def convert_file_format(dataset_id: str, source_format: str, target_format: str 
     import csv
     import io
 
-    from app.core.database import SessionLocal
     from app.core.config import settings
+    from app.core.database import SessionLocal
     from app.core.storage import get_s3_client
     from app.models.db_models import DatasetStatus
     from app.services import crud
@@ -111,9 +115,7 @@ def convert_file_format(dataset_id: str, source_format: str, target_format: str 
         crud.update_dataset_status(db, dataset_id, DatasetStatus.PROCESSING)
 
         client = get_s3_client()
-        response = client.get_object(
-            Bucket=settings.S3_BUCKET_DATASETS, Key=dataset.file_path_s3
-        )
+        response = client.get_object(Bucket=settings.S3_BUCKET_DATASETS, Key=dataset.file_path_s3)
         raw_data = response["Body"].read().decode("utf-8")
 
         records = []
@@ -162,21 +164,22 @@ def convert_file_format(dataset_id: str, source_format: str, target_format: str 
             schema = {k: type(v).__name__ for k, v in records[0].items()}
 
         crud.update_dataset(
-            db, dataset_id,
+            db,
+            dataset_id,
             file_path_s3=jsonl_key,
             row_count=len(records),
             schema_json=schema,
             status=DatasetStatus.READY,
         )
 
-        logger.info("[%s] Converted %s -> jsonl: %d records", dataset_id, source_format, len(records))
+        logger.info(
+            "[%s] Converted %s -> jsonl: %d records", dataset_id, source_format, len(records)
+        )
 
     except Exception as exc:
         logger.error("[%s] Format conversion failed: %s", dataset_id, exc)
-        try:
+        with contextlib.suppress(Exception):
             crud.update_dataset_status(db, dataset_id, DatasetStatus.FAILED, error_message=str(exc))
-        except Exception:
-            pass
     finally:
         db.close()
 
@@ -184,8 +187,8 @@ def convert_file_format(dataset_id: str, source_format: str, target_format: str 
 @celery_app.task(name="data.count_tokens")
 def count_tokens(dataset_id: str, tokenizer_name: str = "cl100k_base"):
     """Count tokens in a formatted dataset using the specified tokenizer."""
-    from app.core.database import SessionLocal
     from app.core.config import settings
+    from app.core.database import SessionLocal
     from app.core.storage import get_s3_client
     from app.services import crud
 
@@ -196,14 +199,13 @@ def count_tokens(dataset_id: str, tokenizer_name: str = "cl100k_base"):
             return
 
         client = get_s3_client()
-        response = client.get_object(
-            Bucket=settings.S3_BUCKET_DATASETS, Key=dataset.file_path_s3
-        )
+        response = client.get_object(Bucket=settings.S3_BUCKET_DATASETS, Key=dataset.file_path_s3)
         raw_data = response["Body"].read().decode("utf-8")
 
         total_tokens = 0
         try:
             import tiktoken
+
             enc = tiktoken.get_encoding(tokenizer_name)
             for line in raw_data.strip().split("\n"):
                 total_tokens += len(enc.encode(line))

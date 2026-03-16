@@ -1,17 +1,15 @@
 """Tests for CRUD operations, cleaning pipeline, and API endpoints."""
 
-import json
-from unittest.mock import MagicMock, patch
-
-import pytest
-
+from unittest.mock import MagicMock
 
 # ═══════════════════════════════════════════════
 # CRUD Tests (mocked DB)
 # ═══════════════════════════════════════════════
 
+
 class FakeDB:
     """Minimal mock for SQLAlchemy session."""
+
     def __init__(self):
         self.added = []
         self.committed = False
@@ -62,8 +60,9 @@ class FakeQuery:
 class TestCRUDCreateDataset:
     def test_create_dataset_adds_record(self):
         from app.services.crud import create_dataset
+
         db = FakeDB()
-        ds = create_dataset(
+        create_dataset(
             db,
             project_id="proj-1",
             name="test-dataset",
@@ -80,10 +79,11 @@ class TestCRUDCreateDataset:
 
 class TestCRUDCreateTrainingRun:
     def test_create_training_run_sets_status(self):
-        from app.services.crud import create_training_run
         from app.models.db_models import RunStatus
+        from app.services.crud import create_training_run
+
         db = FakeDB()
-        run = create_training_run(
+        create_training_run(
             db,
             project_id="proj-1",
             dataset_id="ds-1",
@@ -98,9 +98,11 @@ class TestCRUDCreateTrainingRun:
 # Cleaning Pipeline Tests
 # ═══════════════════════════════════════════════
 
+
 class TestCleaningPipeline:
     def test_dedup_removes_duplicates(self):
         from app.services.cleaning import dedup_node
+
         records = [
             {"text": "hello"},
             {"text": "world"},
@@ -111,6 +113,7 @@ class TestCleaningPipeline:
 
     def test_dedup_by_key(self):
         from app.services.cleaning import dedup_node
+
         records = [
             {"id": "1", "text": "hello"},
             {"id": "2", "text": "world"},
@@ -121,6 +124,7 @@ class TestCleaningPipeline:
 
     def test_length_filter_min_max(self):
         from app.services.cleaning import length_filter_node
+
         records = [
             {"text": "hi"},
             {"text": "this is a medium length text"},
@@ -132,6 +136,7 @@ class TestCleaningPipeline:
 
     def test_regex_filter_include(self):
         from app.services.cleaning import regex_filter_node
+
         records = [
             {"text": "python is great"},
             {"text": "java is also good"},
@@ -142,6 +147,7 @@ class TestCleaningPipeline:
 
     def test_regex_filter_exclude(self):
         from app.services.cleaning import regex_filter_node
+
         records = [
             {"text": "keep this"},
             {"text": "remove bad-word here"},
@@ -152,6 +158,7 @@ class TestCleaningPipeline:
 
     def test_pii_redact_email(self):
         from app.services.cleaning import pii_redact_node
+
         records = [{"text": "Contact me at john@example.com for info"}]
         result = pii_redact_node(records, fields=["text"])
         assert "john@example.com" not in result[0]["text"]
@@ -159,12 +166,14 @@ class TestCleaningPipeline:
 
     def test_pii_redact_phone(self):
         from app.services.cleaning import pii_redact_node
+
         records = [{"text": "Call me at 555-123-4567"}]
         result = pii_redact_node(records, fields=["text"])
         assert "555-123-4567" not in result[0]["text"]
 
     def test_pipeline_runs_sequentially(self):
         from app.services.cleaning import run_pipeline
+
         records = [
             {"text": "hello"},
             {"text": "hello"},
@@ -182,6 +191,7 @@ class TestCleaningPipeline:
 # ═══════════════════════════════════════════════
 # Rate Limiter Tests
 # ═══════════════════════════════════════════════
+
 
 class TestRateLimiter:
     def test_limiter_allows_under_limit(self):

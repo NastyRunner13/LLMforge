@@ -20,7 +20,7 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     task_soft_time_limit=86400,  # 24 hours
-    task_time_limit=90000,       # 25 hours hard limit
+    task_time_limit=90000,  # 25 hours hard limit
     task_routes={
         "app.workers.data_tasks.*": {"queue": "data"},
         "app.workers.training_tasks.*": {"queue": "training"},

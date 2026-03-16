@@ -8,10 +8,10 @@ import hashlib
 import re
 from collections.abc import Callable
 
-
 # ═══════════════════════════════════════════════
 # Pipeline Runner
 # ═══════════════════════════════════════════════
+
 
 def run_pipeline(records: list[dict], nodes: list[dict]) -> list[dict]:
     """Run a list of cleaning nodes sequentially on the records."""
@@ -29,6 +29,7 @@ def run_pipeline(records: list[dict], nodes: list[dict]) -> list[dict]:
 # ═══════════════════════════════════════════════
 # Individual Nodes
 # ═══════════════════════════════════════════════
+
 
 def dedup_node(records: list[dict], *, key: str | None = None, **_kwargs) -> list[dict]:
     """Remove exact-duplicate records.
@@ -61,8 +62,7 @@ def length_filter_node(
 ) -> list[dict]:
     """Filter rows by character length of a text field."""
     return [
-        rec for rec in records
-        if field in rec and min_length <= len(str(rec[field])) <= max_length
+        rec for rec in records if field in rec and min_length <= len(str(rec[field])) <= max_length
     ]
 
 
@@ -137,10 +137,7 @@ def language_filter_node(
 
     # Simple heuristic: if 'en' is requested, keep rows with high ASCII ratio
     if "en" in target_langs:
-        return [
-            rec for rec in records
-            if field in rec and _ascii_ratio(str(rec[field])) > 0.85
-        ]
+        return [rec for rec in records if field in rec and _ascii_ratio(str(rec[field])) > 0.85]
 
     # For other languages, pass through (full implementation needs fastText)
     return records

@@ -1,6 +1,8 @@
 """Training orchestration API routes — wired to real DB + Celery."""
 
+import contextlib
 import json
+
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -15,6 +17,7 @@ router = APIRouter()
 
 class LoraConfig(BaseModel):
     """LoRA-specific configuration."""
+
     r: int = 16
     alpha: int = 32
     target_modules: list[str] = ["q_proj", "v_proj"]
@@ -23,6 +26,7 @@ class LoraConfig(BaseModel):
 
 class TrainingConfig(BaseModel):
     """Full training configuration payload."""
+
     project_id: str
     dataset_id: str
     base_model: str  # HuggingFace model ID
@@ -58,10 +62,16 @@ class TrainingConfig(BaseModel):
 def _estimate_cost(config: TrainingConfig) -> float:
     """Rough credit estimate based on GPU type and training steps."""
     gpu_credits_per_hour = {
-        "T4": 5, "L4": 8, "A10G": 10, "A100_40GB": 20, "A100_80GB": 35,
+        "T4": 5,
+        "L4": 8,
+        "A10G": 10,
+        "A100_40GB": 20,
+        "A100_80GB": 35,
     }
     credits_hr = gpu_credits_per_hour.get(config.gpu_type, 20)
-    estimated_hours = (config.num_epochs * 2) if config.max_steps == -1 else (config.max_steps / 500)
+    estimated_hours = (
+        (config.num_epochs * 2) if config.max_steps == -1 else (config.max_steps / 500)
+    )
     return round(credits_hr * estimated_hours * config.gpu_count, 2)
 
 
@@ -77,7 +87,9 @@ async def launch_training(
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
     if dataset.status and dataset.status.value != "ready":
-        raise HTTPException(status_code=400, detail=f"Dataset is not ready (status: {dataset.status.value})")
+        raise HTTPException(
+            status_code=400, detail=f"Dataset is not ready (status: {dataset.status.value})"
+        )
 
     estimated_cost = _estimate_cost(config)
 
@@ -118,6 +130,7 @@ async def launch_training(
 
     # Queue Celery task
     from app.core.celery_app import celery_app
+
     full_config = {**model_config, **training_config, "dataset_id": config.dataset_id}
     celery_app.send_task(
         "training.launch_training_job",
@@ -139,8 +152,11 @@ async def list_runs(
 ):
     """List training runs, optionally filtered by project or status."""
     runs = crud.list_training_runs(
-        db, project_id=project_id, status=status,
-        skip=(page - 1) * limit, limit=limit,
+        db,
+        project_id=project_id,
+        status=status,
+        skip=(page - 1) * limit,
+        limit=limit,
     )
     return {
         "runs": [
@@ -256,10 +272,12 @@ async def get_logs(
     logs = [
         {
             "step": m.step,
-            "message": f"Step {m.step} — loss: {m.loss:.4f}" + (f", val_loss: {m.val_loss:.4f}" if m.val_loss else ""),
+            "message": f"Step {m.step} — loss: {m.loss:.4f}"
+            + (f", val_loss: {m.val_loss:.4f}" if m.val_loss else ""),
             "timestamp": m.recorded_at.isoformat() if m.recorded_at else None,
         }
-        for m in metrics if m.loss is not None
+        for m in metrics
+        if m.loss is not None
     ]
     return {"logs": logs}
 
@@ -275,14 +293,18 @@ async def pause_run(
     if not run:
         raise HTTPException(status_code=404, detail="Training run not found")
     if run.status != RunStatus.TRAINING:
-        raise HTTPException(status_code=400, detail=f"Cannot pause run in status: {run.status.value}")
+        raise HTTPException(
+            status_code=400, detail=f"Cannot pause run in status: {run.status.value}"
+        )
 
     crud.update_run_status(db, run_id, RunStatus.PAUSED)
 
     # Signal worker via Redis
     try:
         import redis
+
         from app.core.config import settings
+
         r = redis.from_url(settings.REDIS_URL)
         r.publish(f"training:{run_id}:control", "pause")
     except Exception:
@@ -302,7 +324,9 @@ async def resume_run(
     if not run:
         raise HTTPException(status_code=404, detail="Training run not found")
     if run.status != RunStatus.PAUSED:
-        raise HTTPException(status_code=400, detail=f"Cannot resume run in status: {run.status.value}")
+        raise HTTPException(
+            status_code=400, detail=f"Cannot resume run in status: {run.status.value}"
+        )
 
     # Find latest checkpoint
     best = crud.get_best_checkpoint(db, run_id)
@@ -313,6 +337,7 @@ async def resume_run(
 
     # Re-queue with checkpoint
     from app.core.celery_app import celery_app
+
     config = {**(run.model_config_json or {}), **(run.training_config_json or {})}
     if resume_ckpt:
         config["resume_from_checkpoint"] = resume_ckpt.s3_path
@@ -336,14 +361,18 @@ async def cancel_run(
     if not run:
         raise HTTPException(status_code=404, detail="Training run not found")
     if run.status in (RunStatus.COMPLETED, RunStatus.CANCELLED, RunStatus.FAILED):
-        raise HTTPException(status_code=400, detail=f"Run already in terminal state: {run.status.value}")
+        raise HTTPException(
+            status_code=400, detail=f"Run already in terminal state: {run.status.value}"
+        )
 
     crud.update_run_status(db, run_id, RunStatus.CANCELLED)
 
     # Signal worker via Redis
     try:
         import redis
+
         from app.core.config import settings
+
         r = redis.from_url(settings.REDIS_URL)
         r.publish(f"training:{run_id}:control", "cancel")
     except Exception:
@@ -358,6 +387,7 @@ async def metrics_websocket(websocket: WebSocket, run_id: str):
     await websocket.accept()
     try:
         import redis.asyncio as aioredis
+
         from app.core.config import settings
 
         r = aioredis.from_url(settings.REDIS_URL)
@@ -380,7 +410,5 @@ async def metrics_websocket(websocket: WebSocket, run_id: str):
     except WebSocketDisconnect:
         pass
     except Exception:
-        try:
+        with contextlib.suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass

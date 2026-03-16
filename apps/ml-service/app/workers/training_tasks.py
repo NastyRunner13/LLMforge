@@ -1,6 +1,6 @@
 """Training orchestration Celery tasks."""
 
-import json
+import contextlib
 import logging
 import os
 import shutil
@@ -24,8 +24,8 @@ def launch_training_job(self, run_id: str, config: dict):
     5. Checkpoints saved to S3 via callbacks
     6. Register final model on completion
     """
-    from app.core.database import SessionLocal
     from app.core.config import settings
+    from app.core.database import SessionLocal
     from app.core.storage import get_s3_client
     from app.models.db_models import RunStatus
     from app.services import crud
@@ -34,7 +34,9 @@ def launch_training_job(self, run_id: str, config: dict):
     try:
         # 1. Set status to provisioning
         crud.update_run_status(
-            db, run_id, RunStatus.PROVISIONING,
+            db,
+            run_id,
+            RunStatus.PROVISIONING,
             worker_id=self.request.hostname,
         )
 
@@ -49,7 +51,9 @@ def launch_training_job(self, run_id: str, config: dict):
         dataset = crud.get_dataset(db, run.dataset_id)
         if not dataset or not dataset.file_path_s3:
             crud.update_run_status(
-                db, run_id, RunStatus.FAILED,
+                db,
+                run_id,
+                RunStatus.FAILED,
                 error_message="Dataset not found or missing S3 path",
             )
             return
@@ -86,6 +90,7 @@ def launch_training_job(self, run_id: str, config: dict):
         # Upload final model to S3
         s3_model_prefix = f"models/{run.project_id}/{run_id}/final"
         from pathlib import Path
+
         model_path = Path(final_model_dir)
         for file_path in model_path.rglob("*"):
             if file_path.is_file():
@@ -94,7 +99,7 @@ def launch_training_job(self, run_id: str, config: dict):
                 client.upload_file(str(file_path), settings.S3_BUCKET_MODELS, s3_key)
 
         # 5. Register model in DB
-        model_config = config.get("base_model", "unknown")
+        config.get("base_model", "unknown")
         crud.create_model(
             db,
             project_id=run.project_id,
@@ -118,14 +123,14 @@ def launch_training_job(self, run_id: str, config: dict):
 
     except Exception as exc:
         logger.error("[%s] Training failed: %s", run_id, exc)
-        try:
+        with contextlib.suppress(Exception):
             crud.update_run_status(
-                db, run_id, RunStatus.FAILED,
+                db,
+                run_id,
+                RunStatus.FAILED,
                 error_message=str(exc),
             )
-        except Exception:
-            pass
-        raise self.retry(exc=exc, countdown=120 * (2 ** self.request.retries))
+        raise self.retry(exc=exc, countdown=120 * (2**self.request.retries)) from exc
     finally:
         db.close()
 
@@ -134,8 +139,9 @@ def launch_training_job(self, run_id: str, config: dict):
 def save_checkpoint(run_id: str, step: int, checkpoint_dir: str):
     """Save a training checkpoint to S3 and register in DB."""
     from pathlib import Path
-    from app.core.database import SessionLocal
+
     from app.core.config import settings
+    from app.core.database import SessionLocal
     from app.core.storage import get_s3_client
     from app.services import crud
 
@@ -152,7 +158,10 @@ def save_checkpoint(run_id: str, step: int, checkpoint_dir: str):
                 client.upload_file(str(file_path), settings.S3_BUCKET_CHECKPOINTS, s3_key)
 
         crud.create_checkpoint(
-            db, run_id=run_id, step=step, s3_path=s3_prefix,
+            db,
+            run_id=run_id,
+            step=step,
+            s3_path=s3_prefix,
         )
         logger.info("[%s] Checkpoint at step %d saved", run_id, step)
     except Exception as exc:
@@ -171,12 +180,11 @@ def deploy_model(self, model_id: str, gpu_type: str, replicas: int):
     3. Wait for health check
     4. Register the container URL in the endpoint record
     """
-    import time
     import tempfile
-    from pathlib import Path
+    import time
 
-    from app.core.database import SessionLocal
     from app.core.config import settings
+    from app.core.database import SessionLocal
     from app.core.storage import get_s3_client
     from app.models.db_models import EndpointStatus
     from app.services import crud
@@ -203,9 +211,7 @@ def deploy_model(self, model_id: str, gpu_type: str, replicas: int):
 
             s3 = get_s3_client()
             paginator = s3.get_paginator("list_objects_v2")
-            for page in paginator.paginate(
-                Bucket=settings.S3_BUCKET_MODELS, Prefix=model.s3_path
-            ):
+            for page in paginator.paginate(Bucket=settings.S3_BUCKET_MODELS, Prefix=model.s3_path):
                 for obj in page.get("Contents", []):
                     relative = obj["Key"].removeprefix(model.s3_path).lstrip("/")
                     local_path = os.path.join(model_dir, relative)
@@ -223,6 +229,7 @@ def deploy_model(self, model_id: str, gpu_type: str, replicas: int):
 
         try:
             import docker
+
             docker_client = docker.from_env()
 
             # Remove existing container if any
@@ -242,20 +249,23 @@ def deploy_model(self, model_id: str, gpu_type: str, replicas: int):
 
             if gpu_type and gpu_type != "cpu":
                 device_requests = [
-                    docker.types.DeviceRequest(
-                        count=replicas, capabilities=[["gpu"]]
-                    )
+                    docker.types.DeviceRequest(count=replicas, capabilities=[["gpu"]])
                 ]
 
             container = docker_client.containers.run(
                 image="vllm/vllm-openai:latest",
                 name=container_name,
                 command=[
-                    "--model", model_dir,
-                    "--host", "0.0.0.0",
-                    "--port", str(vllm_port),
-                    "--max-model-len", "4096",
-                    "--dtype", "auto",
+                    "--model",
+                    model_dir,
+                    "--host",
+                    "0.0.0.0",
+                    "--port",
+                    str(vllm_port),
+                    "--max-model-len",
+                    "4096",
+                    "--dtype",
+                    "auto",
                 ],
                 ports={f"{vllm_port}/tcp": None},  # Random host port
                 volumes={
@@ -273,7 +283,7 @@ def deploy_model(self, model_id: str, gpu_type: str, replicas: int):
 
             # Step 3: Wait for health check (up to 5 minutes)
             api_url = None
-            for attempt in range(30):
+            for _attempt in range(30):
                 time.sleep(10)
                 container.reload()
 
@@ -290,6 +300,7 @@ def deploy_model(self, model_id: str, gpu_type: str, replicas: int):
                     # Check if vLLM is actually ready
                     try:
                         import httpx
+
                         resp = httpx.get(f"{api_url}/models", timeout=5.0)
                         if resp.status_code == 200:
                             logger.info("[%s] vLLM ready at %s", model_id, api_url)
@@ -302,7 +313,9 @@ def deploy_model(self, model_id: str, gpu_type: str, replicas: int):
 
             # Step 4: Update endpoint record
             crud.update_endpoint_status(
-                db, endpoint.id, EndpointStatus.RUNNING,
+                db,
+                endpoint.id,
+                EndpointStatus.RUNNING,
                 api_url=api_url,
                 container_id=container.id,
             )
@@ -315,7 +328,9 @@ def deploy_model(self, model_id: str, gpu_type: str, replicas: int):
                 model_id,
             )
             crud.update_endpoint_status(
-                db, endpoint.id, EndpointStatus.RUNNING,
+                db,
+                endpoint.id,
+                EndpointStatus.RUNNING,
                 api_url="http://localhost:8080/v1",
                 container_id=f"placeholder-{model_id[:8]}",
             )
@@ -323,13 +338,13 @@ def deploy_model(self, model_id: str, gpu_type: str, replicas: int):
     except Exception as exc:
         logger.error("[%s] Deployment failed: %s", model_id, exc)
         if endpoint:
-            try:
+            with contextlib.suppress(Exception):
                 crud.update_endpoint_status(
-                    db, endpoint.id, EndpointStatus.FAILED,
+                    db,
+                    endpoint.id,
+                    EndpointStatus.FAILED,
                     error_message=str(exc),
                 )
-            except Exception:
-                pass
-        raise self.retry(exc=exc, countdown=60)
+        raise self.retry(exc=exc, countdown=60) from exc
     finally:
         db.close()

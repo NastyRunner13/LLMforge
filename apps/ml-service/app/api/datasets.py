@@ -1,17 +1,16 @@
 """Dataset management API routes — wired to real DB + S3."""
 
 import json
-import io
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
 from app.core.config import settings
+from app.core.database import get_db
 from app.core.security import verify_internal_key
 from app.core.storage import (
     generate_presigned_upload_url,
-    generate_presigned_download_url,
     get_s3_client,
 )
 from app.models.db_models import DatasetStatus
@@ -22,6 +21,7 @@ router = APIRouter()
 
 class UploadRequest(BaseModel):
     """Request body to initiate a dataset upload."""
+
     project_id: str
     filename: str
     content_type: str
@@ -30,17 +30,20 @@ class UploadRequest(BaseModel):
 
 class CleaningNodeConfig(BaseModel):
     """Configuration for a single cleaning pipeline node."""
+
     node_type: str  # dedup, language_filter, length_filter, pii_redact, regex_filter
     params: dict = {}
 
 
 class CleanRequest(BaseModel):
     """Request body to launch a cleaning pipeline."""
+
     nodes: list[CleaningNodeConfig]
 
 
 class FormatRequest(BaseModel):
     """Request body for instruction format mapping."""
+
     system_column: str | None = None
     user_column: str
     assistant_column: str
@@ -97,6 +100,7 @@ async def confirm_upload(
 
     # Queue file conversion/parsing task
     from app.core.celery_app import celery_app
+
     celery_app.send_task(
         "data.convert_file_format",
         args=[dataset_id, dataset.file_format or "jsonl", "jsonl"],
@@ -149,9 +153,7 @@ async def preview_dataset(
 
     try:
         client = get_s3_client()
-        response = client.get_object(
-            Bucket=settings.S3_BUCKET_DATASETS, Key=dataset.file_path_s3
-        )
+        response = client.get_object(Bucket=settings.S3_BUCKET_DATASETS, Key=dataset.file_path_s3)
         raw_data = response["Body"].read().decode("utf-8")
 
         # Parse JSONL
@@ -191,6 +193,7 @@ async def launch_cleaning(
 
     # Queue Celery task
     from app.core.celery_app import celery_app
+
     task = celery_app.send_task(
         "data.run_cleaning_pipeline",
         args=[dataset_id, pipeline_config],
@@ -230,9 +233,7 @@ async def format_dataset(
 
     try:
         client = get_s3_client()
-        response = client.get_object(
-            Bucket=settings.S3_BUCKET_DATASETS, Key=dataset.file_path_s3
-        )
+        response = client.get_object(Bucket=settings.S3_BUCKET_DATASETS, Key=dataset.file_path_s3)
         raw_data = response["Body"].read().decode("utf-8")
 
         rows = []
@@ -261,6 +262,7 @@ async def format_dataset(
         total_tokens = 0
         try:
             import tiktoken
+
             enc = tiktoken.get_encoding(req.tokenizer)
             for row in formatted_rows:
                 for val in row.values():
@@ -282,7 +284,8 @@ async def format_dataset(
         )
 
         crud.update_dataset(
-            db, dataset_id,
+            db,
+            dataset_id,
             row_count=len(formatted_rows),
             token_count=total_tokens,
             file_path_s3=formatted_key,
@@ -294,7 +297,7 @@ async def format_dataset(
         raise
     except Exception as e:
         crud.update_dataset_status(db, dataset_id, DatasetStatus.FAILED, error_message=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.delete("/{dataset_id}")
@@ -312,9 +315,7 @@ async def delete_dataset(
     if dataset.file_path_s3:
         try:
             client = get_s3_client()
-            client.delete_object(
-                Bucket=settings.S3_BUCKET_DATASETS, Key=dataset.file_path_s3
-            )
+            client.delete_object(Bucket=settings.S3_BUCKET_DATASETS, Key=dataset.file_path_s3)
         except Exception:
             pass  # S3 cleanup is best-effort
 

@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
 from app.core.config import settings
+from app.core.database import get_db
 from app.core.security import verify_internal_key
 from app.core.storage import generate_presigned_download_url
 from app.services import crud
@@ -15,6 +15,7 @@ router = APIRouter()
 
 class DeployRequest(BaseModel):
     """Request body to deploy a model to inference."""
+
     gpu_type: str = "A100_40GB"
     replicas: int = 1
 
@@ -88,11 +89,15 @@ async def deploy_model(
 
     # Create endpoint record
     endpoint = crud.create_endpoint(
-        db, model_id=model_id, gpu_type=req.gpu_type, replicas=req.replicas,
+        db,
+        model_id=model_id,
+        gpu_type=req.gpu_type,
+        replicas=req.replicas,
     )
 
     # Queue deployment task
     from app.core.celery_app import celery_app
+
     celery_app.send_task(
         "training.deploy_model",
         args=[model_id, req.gpu_type, req.replicas],
@@ -138,6 +143,7 @@ async def delete_model(
     if model.s3_path:
         try:
             from app.core.storage import get_s3_client
+
             client = get_s3_client()
             client.delete_object(Bucket=settings.S3_BUCKET_MODELS, Key=model.s3_path)
         except Exception:

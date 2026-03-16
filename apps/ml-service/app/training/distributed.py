@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DistributedConfig:
     """Unified distributed training configuration."""
+
     strategy: str = "none"  # "none", "deepspeed_zero2", "deepspeed_zero3", "fsdp"
     num_gpus: int = 1
     per_device_batch_size: int = 4
@@ -52,9 +53,7 @@ def build_deepspeed_config(config: DistributedConfig) -> dict:
         "gradient_accumulation_steps": config.gradient_accumulation_steps,
         "gradient_clipping": 1.0,
         "train_batch_size": (
-            config.per_device_batch_size
-            * config.gradient_accumulation_steps
-            * config.num_gpus
+            config.per_device_batch_size * config.gradient_accumulation_steps * config.num_gpus
         ),
         "train_micro_batch_size_per_gpu": config.per_device_batch_size,
         "wall_clock_breakdown": False,
@@ -62,13 +61,15 @@ def build_deepspeed_config(config: DistributedConfig) -> dict:
 
     # ZeRO-3: partition parameters across GPUs
     if config.zero_stage == 3:
-        ds_config["zero_optimization"].update({
-            "stage3_max_live_parameters": 1e9,
-            "stage3_max_reuse_distance": 1e9,
-            "stage3_prefetch_bucket_size": 5e7,
-            "stage3_param_persistence_threshold": 1e6,
-            "stage3_gather_16bit_weights_on_model_save": True,
-        })
+        ds_config["zero_optimization"].update(
+            {
+                "stage3_max_live_parameters": 1e9,
+                "stage3_max_reuse_distance": 1e9,
+                "stage3_prefetch_bucket_size": 5e7,
+                "stage3_param_persistence_threshold": 1e6,
+                "stage3_gather_16bit_weights_on_model_save": True,
+            }
+        )
 
     # CPU offloading (for memory-constrained setups)
     if config.offload_optimizer:
@@ -85,8 +86,10 @@ def build_deepspeed_config(config: DistributedConfig) -> dict:
 
     logger.info(
         "DeepSpeed config: ZeRO-%d, %d GPUs, batch=%d, grad_accum=%d",
-        config.zero_stage, config.num_gpus,
-        config.per_device_batch_size, config.gradient_accumulation_steps,
+        config.zero_stage,
+        config.num_gpus,
+        config.per_device_batch_size,
+        config.gradient_accumulation_steps,
     )
 
     return ds_config
@@ -114,7 +117,8 @@ def build_fsdp_config(config: DistributedConfig) -> dict:
 
     logger.info(
         "FSDP config: %s, %d GPUs, batch=%d",
-        config.fsdp_sharding_strategy, config.num_gpus,
+        config.fsdp_sharding_strategy,
+        config.num_gpus,
         config.per_device_batch_size,
     )
 
@@ -142,9 +146,8 @@ def apply_distributed_config(training_args_dict: dict, config: DistributedConfig
 
         # Write to temp file (DeepSpeed needs a file path)
         import tempfile
-        ds_config_path = os.path.join(
-            tempfile.gettempdir(), f"ds_config_{os.getpid()}.json"
-        )
+
+        ds_config_path = os.path.join(tempfile.gettempdir(), f"ds_config_{os.getpid()}.json")
         with open(ds_config_path, "w") as f:
             json.dump(ds_config, f, indent=2)
 

@@ -8,9 +8,9 @@ Provides:
 """
 
 import os
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -24,9 +24,6 @@ os.environ["S3_SECRET_KEY"] = "test"
 os.environ["INTERNAL_API_SECRET"] = "test-secret"
 
 from app.core.database import Base
-from app.models.db_models import (
-    Dataset, TrainingRun, Checkpoint, RunMetric, Model, Endpoint,
-)
 
 
 @pytest.fixture(scope="session")
@@ -41,8 +38,8 @@ def engine():
 @pytest.fixture()
 def db(engine):
     """Create a fresh database session for each test."""
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    db_session_maker = sessionmaker(bind=engine)
+    session = db_session_maker()
     yield session
     session.rollback()
     session.close()
@@ -72,8 +69,9 @@ def mock_celery():
 def client(db, mock_s3, mock_celery):
     """Create a FastAPI TestClient with mocked dependencies."""
     from fastapi.testclient import TestClient
-    from app.main import app
+
     from app.core.database import get_db
+    from app.main import app
 
     def override_get_db():
         try:

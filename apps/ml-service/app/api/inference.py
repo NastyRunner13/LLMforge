@@ -1,7 +1,6 @@
 """Inference and endpoint management API routes — with real vLLM proxy."""
 
 import hashlib
-import time
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -9,8 +8,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.rate_limit import inference_limiter
 from app.core.database import get_db
+from app.core.rate_limit import inference_limiter
 from app.core.security import verify_internal_key
 from app.models.db_models import EndpointStatus
 from app.services import crud
@@ -20,12 +19,14 @@ router = APIRouter()
 
 class ChatMessage(BaseModel):
     """A single chat message."""
+
     role: str  # system, user, assistant
     content: str
 
 
 class ChatCompletionRequest(BaseModel):
     """OpenAI-compatible chat completion request."""
+
     model: str
     messages: list[ChatMessage]
     temperature: float = 0.7
@@ -99,6 +100,7 @@ async def stop_endpoint(
     if ep.container_id:
         try:
             import docker
+
             docker_client = docker.from_env()
             container = docker_client.containers.get(ep.container_id)
             container.stop(timeout=30)
@@ -125,6 +127,7 @@ async def delete_endpoint(
     if ep.container_id:
         try:
             import docker
+
             docker_client = docker.from_env()
             container = docker_client.containers.get(ep.container_id)
             container.stop(timeout=10)
@@ -143,8 +146,9 @@ def _find_endpoint_for_model(db: Session, model_name: str):
     for ep in endpoints:
         if ep.status == EndpointStatus.RUNNING:
             model = crud.get_model(db, ep.model_id)
-            if model and (model.name == model_name or model.id == model_name
-                          or model.base_model == model_name):
+            if model and (
+                model.name == model_name or model.id == model_name or model.base_model == model_name
+            ):
                 return ep, model
     return None, None
 
@@ -157,6 +161,7 @@ def _verify_api_key(db: Session, api_key: str, endpoint_id: str) -> bool:
     # Query endpoint API keys table
     try:
         from sqlalchemy import text
+
         result = db.execute(
             text(
                 "SELECT id FROM endpoint_api_keys "
@@ -168,6 +173,7 @@ def _verify_api_key(db: Session, api_key: str, endpoint_id: str) -> bool:
     except Exception:
         # If table doesn't exist yet, allow all keys in dev mode
         from app.core.config import settings
+
         return settings.APP_ENV == "development"
 
 
@@ -194,6 +200,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
 
     # Look up the endpoint for this model
     from app.core.database import SessionLocal
+
     db = SessionLocal()
     try:
         endpoint, model = _find_endpoint_for_model(db, req.model)
@@ -202,7 +209,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
             raise HTTPException(
                 status_code=404,
                 detail=f"No running inference endpoint found for model '{req.model}'. "
-                       f"Deploy the model first via POST /api/models/{{model_id}}/deploy",
+                f"Deploy the model first via POST /api/models/{{model_id}}/deploy",
             )
 
         # Verify API key
@@ -251,10 +258,11 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
         raise HTTPException(
             status_code=503,
             detail=f"Inference endpoint for '{req.model}' is unreachable. "
-                   f"The vLLM container may be starting up or has crashed.",
-        )
+            f"The vLLM container may be starting up or has crashed.",
+        ) from None
     except httpx.TimeoutException:
         raise HTTPException(
             status_code=504,
-            detail="Inference request timed out. Try reducing max_tokens or simplifying the prompt.",
-        )
+            detail="Inference request timed out. "
+            "Try reducing max_tokens or simplifying the prompt.",
+        ) from None

@@ -42,10 +42,7 @@ def parse_file(filepath: str, *, chunk_size: int = 1000) -> list[dict]:
 
     parser = parsers.get(ext)
     if parser is None:
-        raise ValueError(
-            f"Unsupported file type: {ext}. "
-            f"Supported: {', '.join(parsers.keys())}"
-        )
+        raise ValueError(f"Unsupported file type: {ext}. Supported: {', '.join(parsers.keys())}")
 
     return parser(filepath, chunk_size=chunk_size)
 
@@ -60,9 +57,8 @@ def parse_pdf(filepath: str, *, chunk_size: int = 1000) -> list[dict]:
         import fitz  # PyMuPDF
     except ImportError:
         raise ImportError(
-            "PyMuPDF is required for PDF parsing. "
-            "Install with: pip install PyMuPDF"
-        )
+            "PyMuPDF is required for PDF parsing. Install with: pip install PyMuPDF"
+        ) from None
 
     filename = os.path.basename(filepath)
     records: list[dict] = []
@@ -78,22 +74,26 @@ def parse_pdf(filepath: str, *, chunk_size: int = 1000) -> list[dict]:
             # Clean up common PDF artifacts
             text = _clean_pdf_text(text)
 
-            records.append({
-                "text": text,
-                "source": filename,
-                "metadata": {
-                    "page": page_num,
-                    "total_pages": len(doc),
-                    "char_count": len(text),
-                    "format": "pdf",
-                },
-            })
+            records.append(
+                {
+                    "text": text,
+                    "source": filename,
+                    "metadata": {
+                        "page": page_num,
+                        "total_pages": len(doc),
+                        "char_count": len(text),
+                        "format": "pdf",
+                    },
+                }
+            )
     finally:
         doc.close()
 
     logger.info(
         "[Parser] PDF '%s': %d pages → %d records",
-        filename, len(doc), len(records),
+        filename,
+        len(doc),
+        len(records),
     )
     return records
 
@@ -107,9 +107,8 @@ def parse_docx(filepath: str, *, chunk_size: int = 1000) -> list[dict]:
         from docx import Document
     except ImportError:
         raise ImportError(
-            "python-docx is required for DOCX parsing. "
-            "Install with: pip install python-docx"
-        )
+            "python-docx is required for DOCX parsing. Install with: pip install python-docx"
+        ) from None
 
     filename = os.path.basename(filepath)
     doc = Document(filepath)
@@ -132,16 +131,18 @@ def parse_docx(filepath: str, *, chunk_size: int = 1000) -> list[dict]:
             # Flush previous section
             if current_text_parts:
                 section_text = "\n".join(current_text_parts)
-                records.append({
-                    "text": section_text,
-                    "source": filename,
-                    "metadata": {
-                        "heading": current_heading,
-                        "section": section_idx,
-                        "char_count": len(section_text),
-                        "format": "docx",
-                    },
-                })
+                records.append(
+                    {
+                        "text": section_text,
+                        "source": filename,
+                        "metadata": {
+                            "heading": current_heading,
+                            "section": section_idx,
+                            "char_count": len(section_text),
+                            "format": "docx",
+                        },
+                    }
+                )
                 section_idx += 1
                 current_text_parts = []
 
@@ -152,16 +153,18 @@ def parse_docx(filepath: str, *, chunk_size: int = 1000) -> list[dict]:
     # Flush remaining content
     if current_text_parts:
         section_text = "\n".join(current_text_parts)
-        records.append({
-            "text": section_text,
-            "source": filename,
-            "metadata": {
-                "heading": current_heading,
-                "section": section_idx,
-                "char_count": len(section_text),
-                "format": "docx",
-            },
-        })
+        records.append(
+            {
+                "text": section_text,
+                "source": filename,
+                "metadata": {
+                    "heading": current_heading,
+                    "section": section_idx,
+                    "char_count": len(section_text),
+                    "format": "docx",
+                },
+            }
+        )
 
     # Also extract tables
     for table_idx, table in enumerate(doc.tables):
@@ -172,21 +175,25 @@ def parse_docx(filepath: str, *, chunk_size: int = 1000) -> list[dict]:
 
         if rows:
             table_text = "\n".join(rows)
-            records.append({
-                "text": table_text,
-                "source": filename,
-                "metadata": {
-                    "type": "table",
-                    "table_index": table_idx,
-                    "row_count": len(rows),
-                    "char_count": len(table_text),
-                    "format": "docx",
-                },
-            })
+            records.append(
+                {
+                    "text": table_text,
+                    "source": filename,
+                    "metadata": {
+                        "type": "table",
+                        "table_index": table_idx,
+                        "row_count": len(rows),
+                        "char_count": len(table_text),
+                        "format": "docx",
+                    },
+                }
+            )
 
     logger.info(
         "[Parser] DOCX '%s': %d paragraphs → %d records",
-        filename, len(doc.paragraphs), len(records),
+        filename,
+        len(doc.paragraphs),
+        len(records),
     )
     return records
 
@@ -199,7 +206,7 @@ def parse_text(filepath: str, *, chunk_size: int = 1000) -> list[dict]:
     """
     filename = os.path.basename(filepath)
 
-    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+    with open(filepath, encoding="utf-8", errors="replace") as f:
         content = f.read()
 
     # Split into paragraphs
@@ -215,15 +222,17 @@ def parse_text(filepath: str, *, chunk_size: int = 1000) -> list[dict]:
     for para in paragraphs:
         if current_length + len(para) > chunk_size and current_chunk:
             chunk_text = "\n\n".join(current_chunk)
-            records.append({
-                "text": chunk_text,
-                "source": filename,
-                "metadata": {
-                    "chunk": chunk_idx,
-                    "char_count": len(chunk_text),
-                    "format": "text",
-                },
-            })
+            records.append(
+                {
+                    "text": chunk_text,
+                    "source": filename,
+                    "metadata": {
+                        "chunk": chunk_idx,
+                        "char_count": len(chunk_text),
+                        "format": "text",
+                    },
+                }
+            )
             chunk_idx += 1
             current_chunk = []
             current_length = 0
@@ -234,19 +243,23 @@ def parse_text(filepath: str, *, chunk_size: int = 1000) -> list[dict]:
     # Flush remaining
     if current_chunk:
         chunk_text = "\n\n".join(current_chunk)
-        records.append({
-            "text": chunk_text,
-            "source": filename,
-            "metadata": {
-                "chunk": chunk_idx,
-                "char_count": len(chunk_text),
-                "format": "text",
-            },
-        })
+        records.append(
+            {
+                "text": chunk_text,
+                "source": filename,
+                "metadata": {
+                    "chunk": chunk_idx,
+                    "char_count": len(chunk_text),
+                    "format": "text",
+                },
+            }
+        )
 
     logger.info(
         "[Parser] Text '%s': %d chars → %d records",
-        filename, len(content), len(records),
+        filename,
+        len(content),
+        len(records),
     )
     return records
 

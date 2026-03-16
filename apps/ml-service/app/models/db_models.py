@@ -7,11 +7,20 @@ needs direct access to training-related tables for performance.
 
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer,
-    JSON, String, Text, BigInteger,
+    JSON,
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
 )
 from sqlalchemy.orm import relationship
 
@@ -25,12 +34,13 @@ def _default_id():
 
 def _utcnow():
     """Return current UTC datetime (timezone-aware)."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # === Enums ===
 
-class DatasetStatus(str, enum.Enum):
+
+class DatasetStatus(enum.StrEnum):
     UPLOADING = "uploading"
     PROCESSING = "processing"
     CLEANING = "cleaning"
@@ -38,7 +48,7 @@ class DatasetStatus(str, enum.Enum):
     FAILED = "failed"
 
 
-class RunStatus(str, enum.Enum):
+class RunStatus(enum.StrEnum):
     QUEUED = "queued"
     PROVISIONING = "provisioning"
     DOWNLOADING = "downloading"
@@ -50,7 +60,7 @@ class RunStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
-class EndpointStatus(str, enum.Enum):
+class EndpointStatus(enum.StrEnum):
     STARTING = "starting"
     RUNNING = "running"
     STOPPING = "stopping"
@@ -59,6 +69,7 @@ class EndpointStatus(str, enum.Enum):
 
 
 # === Models ===
+
 
 class Dataset(Base):
     __tablename__ = "datasets"

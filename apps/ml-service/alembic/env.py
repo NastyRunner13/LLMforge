@@ -2,13 +2,18 @@
 
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from alembic import context
 from app.core.config import settings
 from app.core.database import Base
 from app.models.db_models import (  # noqa: F401 — ensure models are registered
-    Dataset, TrainingRun, Checkpoint, RunMetric, Model, Endpoint,
+    Checkpoint,
+    Dataset,
+    Endpoint,
+    Model,
+    RunMetric,
+    TrainingRun,
 )
 
 config = context.config

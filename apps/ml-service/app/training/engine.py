@@ -7,7 +7,6 @@ and publishes metrics to Redis for real-time streaming.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import tempfile
@@ -35,9 +34,9 @@ class TrainingEngine:
 
     def setup(self):
         """Load model, tokenizer, dataset, and configure trainer."""
+        from datasets import load_dataset
         from transformers import AutoModelForCausalLM, AutoTokenizer
         from trl import SFTConfig, SFTTrainer
-        from datasets import load_dataset
 
         base_model = self.config.get("base_model", "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
         method = self.config.get("method", "lora")
@@ -45,7 +44,9 @@ class TrainingEngine:
 
         logger.info("[%s] Loading tokenizer: %s", self.run_id, base_model)
         self.tokenizer = AutoTokenizer.from_pretrained(
-            base_model, token=hf_token, trust_remote_code=True,
+            base_model,
+            token=hf_token,
+            trust_remote_code=True,
         )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -55,8 +56,9 @@ class TrainingEngine:
 
         if method == "qlora":
             try:
-                from transformers import BitsAndBytesConfig
                 import torch
+                from transformers import BitsAndBytesConfig
+
                 model_kwargs["quantization_config"] = BitsAndBytesConfig(
                     load_in_4bit=True,
                     bnb_4bit_compute_dtype=torch.bfloat16,
@@ -116,6 +118,7 @@ class TrainingEngine:
         dist_cfg = self.config.get("distributed")
         if dist_cfg and dist_cfg.get("strategy", "none") != "none":
             from app.training.distributed import DistributedConfig, apply_distributed_config
+
             dc = DistributedConfig(
                 strategy=dist_cfg.get("strategy", "none"),
                 num_gpus=dist_cfg.get("num_gpus", 1),
@@ -128,7 +131,9 @@ class TrainingEngine:
                 fsdp_sharding_strategy=dist_cfg.get("fsdp_sharding_strategy", "FULL_SHARD"),
             )
             training_args_dict = apply_distributed_config(training_args_dict, dc)
-            logger.info("[%s] Distributed training: %s (%d GPUs)", self.run_id, dc.strategy, dc.num_gpus)
+            logger.info(
+                "[%s] Distributed training: %s (%d GPUs)", self.run_id, dc.strategy, dc.num_gpus
+            )
 
         training_args = SFTConfig(**training_args_dict)
 
@@ -149,7 +154,8 @@ class TrainingEngine:
                 texts.append("\n".join(parts))
             return texts
 
-        from app.training.callbacks import MetricsCallback, CheckpointUploadCallback
+        from app.training.callbacks import CheckpointUploadCallback, MetricsCallback
+
         callbacks = [
             MetricsCallback(run_id=self.run_id),
             CheckpointUploadCallback(run_id=self.run_id),

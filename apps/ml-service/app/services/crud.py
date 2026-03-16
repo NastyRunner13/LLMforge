@@ -4,7 +4,7 @@ Provides typed create/read/update/delete functions used
 by the API route handlers and Celery workers.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import desc
@@ -28,12 +28,13 @@ def _id() -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # ═══════════════════════════════════════════════
 # Datasets
 # ═══════════════════════════════════════════════
+
 
 def create_dataset(
     db: Session,
@@ -107,6 +108,7 @@ def delete_dataset(db: Session, dataset_id: str) -> bool:
 # Training Runs
 # ═══════════════════════════════════════════════
 
+
 def create_training_run(
     db: Session,
     *,
@@ -144,8 +146,11 @@ def get_training_run(db: Session, run_id: str) -> TrainingRun | None:
 
 
 def list_training_runs(
-    db: Session, project_id: str | None = None, status: str | None = None,
-    skip: int = 0, limit: int = 50,
+    db: Session,
+    project_id: str | None = None,
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 50,
 ) -> list[TrainingRun]:
     q = db.query(TrainingRun)
     if project_id:
@@ -199,6 +204,7 @@ def update_run_status(
 # Checkpoints
 # ═══════════════════════════════════════════════
 
+
 def create_checkpoint(
     db: Session,
     *,
@@ -226,12 +232,7 @@ def create_checkpoint(
 
 
 def list_checkpoints(db: Session, run_id: str) -> list[Checkpoint]:
-    return (
-        db.query(Checkpoint)
-        .filter(Checkpoint.run_id == run_id)
-        .order_by(Checkpoint.step)
-        .all()
-    )
+    return db.query(Checkpoint).filter(Checkpoint.run_id == run_id).order_by(Checkpoint.step).all()
 
 
 def get_best_checkpoint(db: Session, run_id: str) -> Checkpoint | None:
@@ -245,6 +246,7 @@ def get_best_checkpoint(db: Session, run_id: str) -> Checkpoint | None:
 # ═══════════════════════════════════════════════
 # Run Metrics
 # ═══════════════════════════════════════════════
+
 
 def create_run_metric(
     db: Session,
@@ -277,11 +279,12 @@ def create_run_metric(
 
 
 def list_run_metrics(
-    db: Session, run_id: str, from_step: int = 0, to_step: int | None = None,
+    db: Session,
+    run_id: str,
+    from_step: int = 0,
+    to_step: int | None = None,
 ) -> list[RunMetric]:
-    q = db.query(RunMetric).filter(
-        RunMetric.run_id == run_id, RunMetric.step >= from_step
-    )
+    q = db.query(RunMetric).filter(RunMetric.run_id == run_id, RunMetric.step >= from_step)
     if to_step is not None:
         q = q.filter(RunMetric.step <= to_step)
     return q.order_by(RunMetric.step).all()
@@ -290,6 +293,7 @@ def list_run_metrics(
 # ═══════════════════════════════════════════════
 # Models
 # ═══════════════════════════════════════════════
+
 
 def create_model(
     db: Session,
@@ -329,7 +333,9 @@ def get_model(db: Session, model_id: str) -> Model | None:
     return db.query(Model).filter(Model.id == model_id).first()
 
 
-def list_models(db: Session, project_id: str | None = None, skip: int = 0, limit: int = 50) -> list[Model]:
+def list_models(
+    db: Session, project_id: str | None = None, skip: int = 0, limit: int = 50
+) -> list[Model]:
     q = db.query(Model)
     if project_id:
         q = q.filter(Model.project_id == project_id)
@@ -348,6 +354,7 @@ def delete_model(db: Session, model_id: str) -> bool:
 # ═══════════════════════════════════════════════
 # Endpoints
 # ═══════════════════════════════════════════════
+
 
 def create_endpoint(
     db: Session,
@@ -379,7 +386,10 @@ def list_endpoints(db: Session, skip: int = 0, limit: int = 50) -> list[Endpoint
 
 
 def update_endpoint_status(
-    db: Session, endpoint_id: str, status: EndpointStatus, **kwargs,
+    db: Session,
+    endpoint_id: str,
+    status: EndpointStatus,
+    **kwargs,
 ) -> Endpoint | None:
     ep = get_endpoint(db, endpoint_id)
     if not ep:

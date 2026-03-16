@@ -5,6 +5,7 @@ Uses Redis sorted sets for a precise sliding window algorithm.
 """
 
 import time
+
 from fastapi import HTTPException, Request, status
 
 
@@ -26,7 +27,9 @@ class RateLimiter:
         if self._redis is None:
             try:
                 import redis
+
                 from app.core.config import settings
+
                 self._redis = redis.from_url(settings.REDIS_URL)
             except Exception:
                 return None
@@ -89,5 +92,7 @@ class RateLimiter:
 
 
 # Pre-configured limiters
-inference_limiter = RateLimiter(requests_per_minute=30, requests_per_hour=500, key_prefix="rl:inference")
+inference_limiter = RateLimiter(
+    requests_per_minute=30, requests_per_hour=500, key_prefix="rl:inference"
+)
 api_limiter = RateLimiter(requests_per_minute=120, requests_per_hour=5000, key_prefix="rl:api")

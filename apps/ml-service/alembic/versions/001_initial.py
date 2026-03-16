@@ -4,15 +4,17 @@ Revision ID: 001_initial
 Revises: None
 Create Date: 2026-03-06
 """
-from typing import Sequence, Union
 
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
 
+from alembic import op
+
 revision: str = "001_initial"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -53,8 +55,15 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "queued", "provisioning", "downloading", "training",
-                "saving", "paused", "completed", "failed", "cancelled",
+                "queued",
+                "provisioning",
+                "downloading",
+                "training",
+                "saving",
+                "paused",
+                "completed",
+                "failed",
+                "cancelled",
                 name="runstatus",
             ),
             server_default="queued",
@@ -78,7 +87,13 @@ def upgrade() -> None:
     op.create_table(
         "checkpoints",
         sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("run_id", sa.String(36), sa.ForeignKey("training_runs.id", ondelete="CASCADE"), nullable=False, index=True),
+        sa.Column(
+            "run_id",
+            sa.String(36),
+            sa.ForeignKey("training_runs.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
         sa.Column("step", sa.Integer, nullable=False),
         sa.Column("epoch", sa.Float),
         sa.Column("s3_path", sa.String(1000), nullable=False),
@@ -91,7 +106,12 @@ def upgrade() -> None:
     op.create_table(
         "run_metrics",
         sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("run_id", sa.String(36), sa.ForeignKey("training_runs.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "run_id",
+            sa.String(36),
+            sa.ForeignKey("training_runs.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("step", sa.Integer, nullable=False),
         sa.Column("loss", sa.Float),
         sa.Column("val_loss", sa.Float),
@@ -124,7 +144,12 @@ def upgrade() -> None:
     op.create_table(
         "endpoints",
         sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("model_id", sa.String(36), sa.ForeignKey("models.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "model_id",
+            sa.String(36),
+            sa.ForeignKey("models.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column(
             "status",
             sa.Enum("starting", "running", "stopping", "stopped", "failed", name="endpointstatus"),
