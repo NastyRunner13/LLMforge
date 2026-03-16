@@ -59,11 +59,11 @@ services:
   # === FastAPI ML Service ===
   ml-service:
     build:
-      context: ./apps/ml-service
+      context: ../../apps/ml-service
       dockerfile: Dockerfile
     container_name: llmforge-ml-service
     env_file:
-      - ./apps/ml-service/.env
+      - ../../apps/ml-service/.env
     ports:
       - "8000:8000"
     depends_on:
@@ -74,41 +74,41 @@ services:
       minio:
         condition: service_healthy
     volumes:
-      - ./apps/ml-service:/app
+      - ../../apps/ml-service:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   # === Celery Worker (Data Processing) ===
   celery-data-worker:
     build:
-      context: ./apps/ml-service
+      context: ../../apps/ml-service
       dockerfile: Dockerfile
     container_name: llmforge-celery-data
     env_file:
-      - ./apps/ml-service/.env
+      - ../../apps/ml-service/.env
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
-      - ./apps/ml-service:/app
+      - ../../apps/ml-service:/app
     command: celery -A app.core.celery_app worker -Q data -l info --concurrency=2
 
   # === Celery Worker (Training) ===
   celery-training-worker:
     build:
-      context: ./apps/ml-service
+      context: ../../apps/ml-service
       dockerfile: Dockerfile
     container_name: llmforge-celery-training
     env_file:
-      - ./apps/ml-service/.env
+      - ../../apps/ml-service/.env
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
-      - ./apps/ml-service:/app
+      - ../../apps/ml-service:/app
     command: celery -A app.core.celery_app worker -Q training -l info --concurrency=1
 
 volumes:

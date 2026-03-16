@@ -6,7 +6,8 @@ needs direct access to training-related tables for performance.
 """
 
 import enum
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer,
@@ -15,6 +16,16 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+
+
+def _default_id():
+    """Generate a UUID string for use as a primary key default."""
+    return str(uuid.uuid4())
+
+
+def _utcnow():
+    """Return current UTC datetime (timezone-aware)."""
+    return datetime.now(timezone.utc)
 
 
 # === Enums ===
@@ -52,7 +63,7 @@ class EndpointStatus(str, enum.Enum):
 class Dataset(Base):
     __tablename__ = "datasets"
 
-    id = Column(String(36), primary_key=True)
+    id = Column(String(36), primary_key=True, default=_default_id)
     project_id = Column(String(36), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     original_filename = Column(String(500))
@@ -65,18 +76,18 @@ class Dataset(Base):
     cleaning_config_json = Column(JSON)
     status = Column(Enum(DatasetStatus), default=DatasetStatus.UPLOADING)
     error_message = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 
 class TrainingRun(Base):
     __tablename__ = "training_runs"
 
-    id = Column(String(36), primary_key=True)
+    id = Column(String(36), primary_key=True, default=_default_id)
     project_id = Column(String(36), nullable=False, index=True)
     dataset_id = Column(String(36), ForeignKey("datasets.id"), nullable=False)
     experiment_name = Column(String(255), default="")
-    tags = Column(JSON, default=[])
+    tags = Column(JSON, default=list)
 
     # Configuration (stored as JSONB for flexibility)
     model_config_json = Column(JSON, nullable=False)
@@ -98,10 +109,10 @@ class TrainingRun(Base):
     gpu_seconds = Column(Integer, default=0)
 
     # Timestamps
-    queued_at = Column(DateTime, default=datetime.utcnow)
+    queued_at = Column(DateTime, default=_utcnow)
     started_at = Column(DateTime)
     finished_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     # Relationships
     checkpoints = relationship("Checkpoint", back_populates="run", cascade="all, delete-orphan")
@@ -111,14 +122,14 @@ class TrainingRun(Base):
 class Checkpoint(Base):
     __tablename__ = "checkpoints"
 
-    id = Column(String(36), primary_key=True)
+    id = Column(String(36), primary_key=True, default=_default_id)
     run_id = Column(String(36), ForeignKey("training_runs.id"), nullable=False, index=True)
     step = Column(Integer, nullable=False)
     epoch = Column(Float)
     s3_path = Column(String(1000), nullable=False)
     val_loss = Column(Float)
     is_best = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     # Relationships
     run = relationship("TrainingRun", back_populates="checkpoints")
@@ -127,7 +138,7 @@ class Checkpoint(Base):
 class RunMetric(Base):
     __tablename__ = "run_metrics"
 
-    id = Column(String(36), primary_key=True)
+    id = Column(String(36), primary_key=True, default=_default_id)
     run_id = Column(String(36), ForeignKey("training_runs.id"), nullable=False, index=True)
     step = Column(Integer, nullable=False)
     loss = Column(Float)
@@ -136,7 +147,7 @@ class RunMetric(Base):
     throughput = Column(Float)  # tokens/sec
     gpu_utilization = Column(Float)  # 0-100%
     vram_usage_gb = Column(Float)
-    recorded_at = Column(DateTime, default=datetime.utcnow)
+    recorded_at = Column(DateTime, default=_utcnow)
 
     # Relationships
     run = relationship("TrainingRun", back_populates="metrics")
@@ -145,7 +156,7 @@ class RunMetric(Base):
 class Model(Base):
     __tablename__ = "models"
 
-    id = Column(String(36), primary_key=True)
+    id = Column(String(36), primary_key=True, default=_default_id)
     project_id = Column(String(36), nullable=False, index=True)
     run_id = Column(String(36), ForeignKey("training_runs.id"))
     checkpoint_id = Column(String(36), ForeignKey("checkpoints.id"))
@@ -156,13 +167,13 @@ class Model(Base):
     training_method = Column(String(50))  # sft, lora, qlora
     quantization = Column(String(20))
     s3_path = Column(String(1000))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class Endpoint(Base):
     __tablename__ = "endpoints"
 
-    id = Column(String(36), primary_key=True)
+    id = Column(String(36), primary_key=True, default=_default_id)
     model_id = Column(String(36), ForeignKey("models.id"), nullable=False)
     status = Column(Enum(EndpointStatus), default=EndpointStatus.STARTING)
     api_url = Column(String(500))
@@ -170,5 +181,5 @@ class Endpoint(Base):
     replicas = Column(Integer, default=1)
     container_id = Column(String(100))  # Docker/K8s container reference
     error_message = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
     stopped_at = Column(DateTime)
