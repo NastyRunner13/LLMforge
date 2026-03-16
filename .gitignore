@@ -45,3 +45,6 @@ htmlcov/
 # Misc
 *.log
 *.tsbuildinfo
+
+LLM_Forge_Project_Scope.docx
+
