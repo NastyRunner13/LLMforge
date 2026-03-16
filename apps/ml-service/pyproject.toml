@@ -1,3 +1,11 @@
+[build-system]
+requires = ["setuptools>=70.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["alembic*", "tests*"]
+
 [project]
 name = "llm-forge-ml-service"
 version = "0.1.0"
@@ -24,6 +32,9 @@ dependencies = [
     "tiktoken>=0.8.0",
     "spacy>=3.8.0",
     "websockets>=14.0",
+    "docker>=7.0.0",
+    "PyMuPDF>=1.24.0",
+    "python-docx>=1.1.0",
 ]
 
 [project.optional-dependencies]
